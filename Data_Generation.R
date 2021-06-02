@@ -1,4 +1,5 @@
 library('truncnorm')
+library('rlist')
 
 # Initialize variables ----------------------------------------------------
 
@@ -14,8 +15,8 @@ for(i in 2:periods) {
 
 #initial values for new student aggregate model
 B_GDP <- 2
-mean_new_students <- 100
-sd_new_students <- 20
+mean_new_students <- 400
+sd_new_students <- 80
 
 #initial values for t = 0 individual student creation
 proportion_female <- 0.5
@@ -26,7 +27,7 @@ mean_credits <- 9
 sd_credits <- 6
 
 #values for 'return' variable calculation
-B_Gender <- 0.5
+B_Gender <- 0.1
 B_Credits <- 0.02
 
 # Aggregate prediction ----------------------------------------------------
@@ -71,8 +72,8 @@ enrolled_students$Gender <- as.numeric(enrolled_students$Gender)
 
 #linear model predicting likelihood of return.
 #model includes gender, cumulative credits, and noise
-temp <- enrolled_students$Gender * B_Gender + 
-  enrolled_students$Credits * B_Credits + 
+temp <- enrolled_students$Gender * B_Gender - 
+  (enrolled_students$Credits * B_Credits)^2 + enrolled_students$Credits * B_Credits +
   rnorm(nrow(enrolled_students),
         mean = 0,
         sd = 0.1)
@@ -83,14 +84,16 @@ enrolled_students$likelihood_of_return <- 1 / (1 + exp(1)^-(temp))
 #generate realized 'return' values by sampling (0/1) using probability
 #generated above
 for(i in 1:nrow(enrolled_students)) {
-  enrolled_students$returned[i] <- enrolled_students$returned[i] <- sample(0:1,
-                                                                           size = 1,
-                                                                           replace = TRUE,
-                                                                           #I know this says 'likelihood of return', but since I
-                                                                           #did 0/1, it's reversed for the sake of probability
-                                                                           prob = c(1 - enrolled_students$likelihood_of_return[i], 
-                                                                                    enrolled_students$likelihood_of_return[i]))
+  enrolled_students$returned[i] <- sample(0:1,
+                                          size = 1,
+                                          replace = TRUE,
+                                          #I know this says 'likelihood of return', but since I
+                                          #did 0/1, it's reversed for the sake of probability
+                                          prob = c(1 - enrolled_students$likelihood_of_return[i], 
+                                                   enrolled_students$likelihood_of_return[i]))
 }
+
+enrolled_students$semester <- 1
 
 enrolled <- list()
 
@@ -133,25 +136,13 @@ for(i in 2:periods) {
   
   temp$Gender <- as.numeric(temp$Gender)
   
-  #for new students, generate likelihood of returning at t+1
-  temp$likelihood_of_return <- temp$Gender * B_Gender + temp$Credits * B_Credits + rnorm(nrow(temp),
-                                                                                         mean = 0,
-                                                                                         sd = 0.1)
+  #initiate likelihood of return variable for new students
+  temp$likelihood_of_return <- NA
+
+  #add semester index to 
+  temp$semester <- NA
   
-  #coerce to probability using logistic function
-  temp$likelihood_of_return <- 1 / (1 + exp(1)^-(temp$likelihood_of_return))
-  
-  #generate realized value for 'returned' variable using probability
-  #generated above. This is for each NEW student
-  for(j in 1:nrow(temp)) {
-    temp$returned[j] <- sample(0:1,
-                               size = 1,
-                               replace = TRUE,
-                               #I know this says 'likelihood of return', but since I
-                               #did 0/1, it's reversed for the sake of probability
-                               prob = c(1 - temp$likelihood_of_return[j], 
-                                        temp$likelihood_of_return[j]))
-  }
+  temp$returned <- NA
   
   #bind together all new students at t = 1 and 
   # returning students from t - 1
@@ -164,6 +155,28 @@ for(i in 2:periods) {
                                                                     mean = mean_credits,
                                                                     sd = sd_credits))
   
+  #calculate likelihood of return in t + 1
+  enrolled[[i]]$likelihood_of_return <- enrolled[[i]]$Gender * B_Gender - 
+    (enrolled[[i]]$Credits * B_Credits)^2 + enrolled[[i]]$Credits * B_Credits 
+  + rnorm(nrow(enrolled[[i]]),
+               mean = 0,
+               sd = 0.1)
+  
+  #coerc to probability
+  enrolled[[i]]$likelihood_of_return <- enrolled[[i]]$likelihood_of_return <- 1 / 
+    (1 + exp(1)^-(enrolled[[i]]$likelihood_of_return))
+  
+  for(j in 1:nrow(enrolled[[i]])){
+    enrolled[[i]]$returned[j] <- sample(0:1,
+                                        size = 1,
+                                        replace = TRUE,
+                                        prob = c(1 - enrolled[[i]]$likelihood_of_return[j],
+                                                 enrolled[[i]]$likelihood_of_return[j]))
+    
+  }
+  
+  #add semester index
+  enrolled[[i]]$semester <- i
+  
   remove(temp)
 }
-
