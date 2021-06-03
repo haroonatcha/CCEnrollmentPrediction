@@ -32,7 +32,15 @@ I took a first stab at generating the data that we can fit models to later down 
 
 ### 06/03/21 notes
 
-I added a constant term to the 'likelihood of return' model to increase the mean retention rate and hold cohort levels stable. I also differentiate between semester credits and cumulative credits. As a note: Unless we're going to assume that t = 1 is the very first semester our college accepted students (and other nonsense assumptions), we need to simulate cumulative credit loads for students at that time period. We *could* just increase our t and throw away the first 10-20 observations with the expectation that cumulative loads will find an equilibrium pretty quickly, but that seems like a wasteful way to do it when we can just simulate reasonable starting points. I also simplified the code for binding together 'new' and 'returning' students and realized that I was adding 'credit load' twice to new students. This has been fixed. I also added a few diagnostic plots and some of the tests I ran to see if we were producing reasonable simulations. It looks like we are but should probably toss out the first few (3-4) semesters when model fitting.
+Key takeaways
+- Improved data generation process
+- Started Modelling
+- Fixed bugs
+
+Detailed summary
+I added a constant term to the 'likelihood of return' model to increase the mean retention rate and hold cohort levels stable. I also differentiated between semester credits and cumulative credits^[Unless we're going to assume that t = 1 is the very first semester our college accepted students (and other nonsense assumptions), we need to simulate cumulative credit loads for students at that time period. We *could* just increase our t and throw away the first 10-20 observations with the expectation that cumulative loads will find an equilibrium pretty quickly, but that seems like a wasteful way to do it when we can just simulate reasonable starting points.]. I also simplified the code for binding together 'new' and 'returning' students and realized that I was adding 'credit load' twice to new students. This has been fixed. I also added a few diagnostic plots and some of the tests I ran to see if we were producing reasonable simulations. It looks like we are but should probably toss out the first few (3-4) semesters when model fitting.
+
+I also put together a preliminary model building file. This fits arima and linear models to the aggregate trends and compares them to the 'stacked' model. Unsurprisingly, the stacked model does better. Something to note though, it does better EVEN WITHOUT including the GDP term for new students. Seasonality alone gets us really close. This might be something I try to emphasize in the paper writing process.
 
 ## Haroon's Garden of Forking Paths
 

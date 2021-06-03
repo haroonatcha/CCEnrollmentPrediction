@@ -268,6 +268,15 @@ semester_variables$Total_credits_taken <- aggregate(temp$Credits,
                                                     by = list(temp$semester),
                                                     FUN = sum)[,2]
 
+#write out aggregate file
+#write.csv(semester_variables,
+#          file = 'data.csv')
 
-write.csv(semester_variables,
-          file = 'data.csv')
+#write out individual file
+#write.csv(temp,
+#          file = 'student_level.csv')
+
+#write out new student count file
+#write.csv(data.frame(new_student_count),
+#          file = 'new_student_count.csv')
+
