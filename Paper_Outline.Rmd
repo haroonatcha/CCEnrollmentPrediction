@@ -1,0 +1,54 @@
+---
+title: "Paper Outline"
+author: "Haroon Atcha"
+date: "6/4/2021"
+output: html_document
+---
+
+# Summary
+
+Outlines help me write. They are good at organizing my thoughts and help me put citations and figures in the right place. A clean outline makes draft writing much easier. This is the outline for the paper that should hopefully come out of this project.
+
+# Outline
+
+1. Introduction
+    - Problems
+      - Community Colleges operate under unique data constraints, most of the literature on enrollment management is for selective-enrollment universities
+        - Cite: Aksenova, Chen, Nandeshwar, Slim (From selective enrollment universities)
+        - cite: Bender, Lawrence, Pennington (from community colleges)
+      - Predictive models of enrollment don't reflect our theoretical models
+        - Not all processes are ARIMA; cite: Chen, Pfitzner
+        - You should model different processes differently; cite: Chen, Trusheim
+    - Argument: We can do better by having our statistical models match our theoretical models
+  
+2. Data
+    - Show Data Generation Chart
+    - Data Generation Process
+      - Returning students (Linear model)
+      - New students (Linear with time series terms)
+    - Summary Statistics
+      - Prove that the summary statistics are close to what we'd expect in an actual case study
+      - Make the case for parsimonious models (since I only used 1-2 variables for each process)
+      - Show enrollment time series
+      
+3. Methods
+    - Aggregate models
+      - ARIMA
+      - Linear model
+    - Stacked model
+      - Logit component (returning)
+      - ARIMA component (new enrollees)
+      
+4. Results
+    - Robustness checks
+      - Individual level confusion matrix
+      - MAPE, MAE, and MSE table for each model type
+        - ARIMA only
+        - Linear only
+        - Stacked linear
+        - Stacked curvilinear
+    - Toy example has prediction rates close to what case studies show
+    - **Even a misspecified stacked model predicts better if it's closer to the theoretical process**
+    
+5. Conclusion
+    - Predictive models perform better when they are reflective of our theoretical knowledge
