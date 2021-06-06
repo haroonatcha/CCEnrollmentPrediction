@@ -61,3 +61,7 @@ Here I'm listing things that are either a problem or area for improvement, order
 
 - ~~It may be useful to add a seasonal component to our new student model. This would probably just be a t - 3 lag and we can name categories 'spring', 'summer', and 'fall'. That might capture the intuition that practitioners are more used to.~~
     - Update (06/03/21): I added semester binary columns and added a small effect for each in the 'new student' model. I don't add semester terms to returning student likelihood model. Though I'm sure this theoretically plays some role, I think the point of this exercise is to show that different populations act differently. If we *do* add these to the model of retention likelihood, it will be as a model for the constant (since semester is constant in any given semester) and it should have less pronounced effects. However, I'd like to stay away from overcomplicating things at this point. I'm gonna call this done.
+    
+- I should model the new enrollees as an actual AR(3) process, maybe with a MA(1) term. Right now, I get half way there with the semester terms but it's not the correct 
+
+- Clean up the data generating chart for the paper. Right now it's needlessly complicated and the formulas can be taken out since they're in the body of the text.
