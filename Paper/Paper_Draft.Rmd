@@ -3,8 +3,8 @@ title: 'Predicting Enrollment with Stacked Models: Bringing Together Theory and 
 author: "Haroon Atcha"
 date: "6/4/2021"
 output:
-  word_document: default
   html_document: default
+  word_document: default
 bibliography: Citations.bib
 ---
 
@@ -30,10 +30,95 @@ The data used in this paper was generated specifically for the purpose and was *
 
 ## Data Generating Process
 
-The data used in this study was generated through two processes. First, the number of new enrollees in a given semester was generated at the aggregate level (i.e. total number of new students). Second, the retention status of enrolled students in a given semester was generated at the individual level (i.e. did student n return at t + 1). Finally, the individual level predictions were aggregated and summed with the number of new enrollees to produce total headcount for a given semester. This process is visualized in chart 1. 
+The data used in this study was generated through two processes. First, the number of new enrollees in a given semester was generated at the aggregate level (i.e. total number of new students). Second, the retention status of enrolled students in a given semester was generated at the individual level (i.e. did student n return at t + 1). Finally, the individual level predictions were aggregated and summed with the number of new enrollees to produce total headcount for a given semester. This process is visualized below. Nodes in yellow are 'outputs' of the generation process which are used in the model fitting section.  
 
 ```{r, echo = FALSE}
-knitr::include_graphics('Data Generation Process.png')
+library('DiagrammeR')
+
+grViz("
+digraph data_generation {
+
+  graph[rankdir = TD]
+
+      subgraph cluster_0{
+      
+      graph[shape = rectangle
+      label = 'Individual-level'
+      labelloc = t
+      fontsize = 25
+      rankdir = TD]
+      
+      node[shape = 'box']
+      a[label = 'Students @ t-1']
+      b[label = 'Logistic\nregression', shape = 'cylinder']
+      c[label = 'Predict probability of return']
+      d[label = 'Generate return status']
+      e[label = 'Non-returning students']
+      f[label = 'Returning Student']
+      n[label = 'Random sample', shape = 'cylinder']
+      r[label = 'Random sample', shape = 'cylinder']
+      t[label = 'Credit load']
+      
+      {rank = same; b, c}
+      {rank = same; e, f}
+      {rank = same; r, d}
+      {rank = same; n, t}
+      
+      #edges
+      a -> c
+      b -> c
+      d -> {e, f}
+      c -> d
+      r -> d
+      f -> t
+      n -> t
+      c -> r[style = dashed]
+      }
+      
+      subgraph cluster_1{
+      graph[shape = rectangle
+      label = 'Aggregate-level'
+      labelloc = t
+      fontsize = 25]
+      
+      node[shape = 'box']
+      g[label = 'Number of New Students']
+      ab[label = 'Create N individual records']
+      h[label = 'OLS', shape = 'cylinder']
+      aa[label = 'De-normalize & round', shape = 'cylinder']
+      o[label = 'Individual variable values']
+      ac[label = 'Random sample', shape = 'cylinder']
+      
+      {rank = same; g, h, aa}
+      {rank = same; o, ac}
+      
+      #edges
+      h -> aa
+      aa -> g
+      g -> ab
+      ab -> o
+      ac -> o
+      }
+      
+
+      node[shape = 'box']
+      j[label = 'Join']
+      l[label = 'New students']
+      q[label = 'Individual records @ t']
+      u[label = 'Returning students']
+      ad[label = 'Aggregate']
+      ae[label = 'Total enrollment @ t']
+      
+      #edges
+      o -> l
+      {l, u} -> j
+      j -> q
+      t -> u
+      j -> ad
+      ad -> ae
+      
+      
+}")
 ```
 
 ### Returning Enrollees
@@ -56,17 +141,53 @@ New Students = ($\sigma_{New\ Students}$ * y) + $\mu_{New\ Students}$
 
 Modeling choices ought to reflect our underlying knowledge about the data generating process. In this example, we know that the processes that generated our observations vary across sub-populations. Different generative models determine the number of new enrollees and returning students in a given semester. Rather than fitting a single model to the aggregate count of enrollees, which would entail a misalignment between theory and practice and require us to throw away a large amount of information at the individual level, we can estimate a 'stacked' model instead, fitting different models to different sub-populations and aggregating those predictions.
 
-To demonstrate the value in building theory-informed predictive models, I fit and compare several such models. I test autoregressive integrated moving average (ARIMA) and simple linear models at the aggregate level, as these are the most common approaches in the extent literature and compare them to three stacked models. For the first stacked model, I predict the number of returning students at the individual level using logistic regression and use that number as a linear predictor of the *total* number of enrolling students at semester t + 1. Second, I fit a theoretically misspecified model, predicting the number of returning students at the individual level using *only* lower order terms in a logistic regression and the number of new students using ARIMA. Finally, I fit a correctly specified model which differs only insofar as it uses a correct higher order term in the individual prediction section.
+To demonstrate the value in building theory-informed predictive models, I fit and compare several such models. I test autoregressive integrated moving average (ARIMA) and simple linear models at the aggregate level, as these are the most common approaches in the extent literature^[Exponential smoothing approaches are also common early in the enrollment forecasting literature; X, for instance, lists such an approach as one of the most common ways community college practitioners approach modeling. However, this approach sees little use - at least in its simple form - among contemporary practitioners who prefer other methods of time series modeling. For this reason, I elect not to include an exponential smoothing model in my comparison] and compare them to two stacked models. For the first stacked model, I fit a theoretically misspecified model, predicting the number of returning students at the individual level using  non-polynomial terms in a logistic regression and the number of new students using ARIMA. For the second, I fit a correctly specified model with the correct polynomial term.
 
-I compare the results of these models using the Mean Absolute Percent Error (MAPE), Mean Absolute Standard Error (MASE), and Root Mean Squared Error (RMSE), three widely used measures of model accuracy. 
+I compare the results of these models using the Mean Mean Absolute Error (MASE), Absolute Percent Error (MAPE), and Root Mean Squared Error (RMSE), three widely used measures of model accuracy. 
 
 # Results
 
+```{r, echo = FALSE}
+library('ggplot2')
+library('reshape2')
+
+predictions <- read.csv('predictions.csv')
+
+predictions <- predictions[,-1]
+
+predictions <- predictions[,c(5, grep('prediction', colnames(predictions)))]
+
+predictions$semester <- 1:nrow(predictions)
+
+predictions <- melt(predictions,
+                    id.vars = 'semester')
+
+predictions <- predictions[complete.cases(predictions),]
+
+predictions <- predictions[-which(predictions$variable == 'stacked_predictions_1'),]
+
+ggplot(data = predictions) +
+  geom_line(aes(x = semester,
+                y = value,
+                color = variable,
+                group = variable)) +
+  theme()
+
+```
+
+
+```{r, echo = FALSE}
+diagnostics <- read.csv('diagnostics.csv')
+
+diagnostics <- diagnostics[,-1]
+
+knitr::kable(diagnostics)
+```
+
+
 # Discussion
 
-A skeptical reader may justifiably question the value in the above exercise. After all, of course the better specified model predicted more accurately, we *knew* the correct parameters before starting. This is, however, exactly the point. Often, practitioners approach enrollment prediction from a point of imposed ignorance. Brute force and automated methods of feature selection are treated as substitutes for theoretically informed modeling choices^[This is not to argue that automated and brute force methods of feature selection are inherently bad. Note that the ARIMA model fit in the stacked version above iterates through all combinations of parameters to find the best fit. Such methods are powerful tools but they are best leveraged when informed by theoretically grounded modeling choices.]. In the community college context, where data availability can be limited and the process that generates enrollment data is idiosyncratic in known ways, discarding such knowledge has practical consequences for the accuracy of our enrollment forecasts and consequently, on resource availability. Practitioners ought to take pains to incorporate theoretical knowledge in predictive forecasts. Employing stacked models, as shown above, can be a simple manner of doing so.
-
-# Future Research
+A skeptical reader may justifiably question the value in the above exercise. After all, of course the better specified model predicted more accurately, we *knew* the true parameters and data generating process before starting. This is, however, exactly the point. Often, practitioners approach enrollment prediction from a point of imposed ignorance. Brute force and automated methods of feature selection are treated as substitutes for theoretically informed modeling choices^[This is not to argue that automated and brute force methods of feature selection are inherently bad. Note that the ARIMA model fit in the stacked version above iterates through all combinations of parameters to find the best fit. Such methods are powerful tools but they are best leveraged when informed by theoretically grounded modeling choices.]. In the community college context, where data availability can be limited and the process that generates enrollment data is idiosyncratic in known ways, discarding such knowledge has practical consequences for the accuracy of our enrollment forecasts and consequently, on resource availability. Practitioners ought to take pains to incorporate theoretical knowledge in predictive forecasts. Employing stacked models, as shown above, can be a simple manner of doing so.
 
 \newpage
 

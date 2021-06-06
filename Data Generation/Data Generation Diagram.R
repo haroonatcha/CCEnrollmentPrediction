@@ -52,7 +52,7 @@ digraph data_generation {
       g[label = 'Predict # of new students']
       h[label = 'OLS@^{2}', shape = 'cylinder']
       i[label = 'Sample credit load']
-      m[label = 'rnorm@^{3}', shape = 'cylinder']
+      m[label = '@@1', shape = 'cylinder']
       o[label = 'Generate individual values']
       v[label = 'Sample gender + credits@^{5}', shape = 'cylinder']
       
@@ -107,4 +107,6 @@ digraph data_generation {
       m -> x[style = 'invis']
       
       {rank = same; a, w}
-}")
+}
+
+[1]: 'test'")

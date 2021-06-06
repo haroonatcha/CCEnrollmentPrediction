@@ -42,6 +42,16 @@ I added a constant term to the 'likelihood of return' model to increase the mean
 
 I also put together a preliminary model building file. This fits arima and linear models to the aggregate trends and compares them to the 'stacked' model. Unsurprisingly, the stacked model does better. Something to note though, it does better EVEN WITHOUT including the GDP term for new students. Seasonality alone gets us really close. This might be something I try to emphasize in the paper writing process.
 
+### 06/06/21 notes
+
+- Added a polynomial term stacked model for comparison
+- Fixed a problem where I didn't specify family = 'binomial' in the individual model
+- Calculated RMSE and MAE for the models
+- Added line chart comparing different forecasts in 'results' section
+- Updated model generation chart
+- Added a linear model with a lagged term for comparison
+- Changed the ARIMA portion of the stacked model to a linear model to better reflect data generating process
+
 ## Haroon's Garden of Forking Paths
 
 Here I'm listing things that are either a problem or area for improvement, ordered by what I think is most to least important. Problems are **bolded**, nice-to-haves are not.
@@ -62,6 +72,10 @@ Here I'm listing things that are either a problem or area for improvement, order
 - ~~It may be useful to add a seasonal component to our new student model. This would probably just be a t - 3 lag and we can name categories 'spring', 'summer', and 'fall'. That might capture the intuition that practitioners are more used to.~~
     - Update (06/03/21): I added semester binary columns and added a small effect for each in the 'new student' model. I don't add semester terms to returning student likelihood model. Though I'm sure this theoretically plays some role, I think the point of this exercise is to show that different populations act differently. If we *do* add these to the model of retention likelihood, it will be as a model for the constant (since semester is constant in any given semester) and it should have less pronounced effects. However, I'd like to stay away from overcomplicating things at this point. I'm gonna call this done.
     
-- I should model the new enrollees as an actual AR(3) process, maybe with a MA(1) term. Right now, I get half way there with the semester terms but it's not the correct 
+- ~~I should model the new enrollees as an actual AR(3) process, maybe with a MA(1) term. Right now, I get half way there with the semester terms but it's not the correct~~
+    - Update (06/03/21): I've changed my mind on this. I generated GDP change as a random walk process which, given how important the GDP term is in the new student model, imparts time series qualities to the # of new students anyway. Moreover, I think theoretically the # of new students *isn't* actually an autoregressive process. Gonna leave this as is.
 
-- Clean up the data generating chart for the paper. Right now it's needlessly complicated and the formulas can be taken out since they're in the body of the text.
+- ~~Clean up the data generating chart for the paper. Right now it's needlessly complicated and the formulas can be taken out since they're in the body of the text.~~
+    - Update (06/06/21) Removed and updated parts of this chart. Cut out a lot of the specific random sampling nodes and simplified a lot of the rest of it.
+    
+- Adding the lagged term to the linear model immediately made it the best model out there. That doesn't necessarily fit with the point of the paper but I'm gonna try to roll with it. I need to find a way to incorporate this into the paper. Initially, I was thinking that having 'return' be a function of GDP as well (with different influence on returning vs new students) would show why you need to have theoretically informed models (i.e., the model would have difficulty finding the 'correct' estimate for the effect of GDP since it varies across sub-populations)

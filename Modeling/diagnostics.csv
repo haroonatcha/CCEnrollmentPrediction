@@ -1,0 +1,6 @@
+"","Model","MAE","MAPE","RMSE"
+"1","Linear Model",120.44,"9.36%",155.95
+"2","Linear w/ lag",29.28,"2.55%",42.22
+"3","ARIMA",76.16,"6.12%",95.54
+"4","Stacked Model",33.91,"2.72%",44.38
+"5","Stacked Model w/ Polynomial",34.68,"2.78%",44.94
