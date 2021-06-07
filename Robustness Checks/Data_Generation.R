@@ -1,0 +1,514 @@
+library('truncnorm')
+library('rlist')
+library('forecast')
+library('scales')
+library('ggplot2')
+library('reshape2')
+
+#everything in this file is just a combination of the data generation and
+#modeling files up to the final section which shows how I generated the
+#aggregate fit values
+
+# Initialize variables ----------------------------------------------------
+
+set.seed(1000)
+
+#values for GDP. Random walk process
+periods <- 100
+GDP <- rnorm(1, mean = 0, sd = 1)
+
+for(i in 2:periods) {
+  GDP[i] <- GDP[i - 1] + rnorm(1, mean = 0, sd = 1)
+}
+
+GDP <- GDP + abs(min(GDP))
+
+#creating a data frame with semester binaries
+semester_variables <- data.frame(cbind(GDP,
+                                       rep_len(c(1, 0, 0),
+                                               length.out = periods),
+                                       rep_len(c(0, 1, 0),
+                                               length.out = periods),
+                                       rep_len(c(0, 0, 1),
+                                               length.out = periods)))
+
+colnames(semester_variables) <- c('GDP', 'Spring', 'Summer', 'Fall')
+
+
+#initial values for new student aggregate model
+B_GDP <- 2
+mean_new_students <- 150
+sd_new_students <- 25
+B_spring <- 3
+B_summer <- 0
+B_fall <- 6
+
+#initial values for t = 0 individual student creation
+proportion_female <- 0.5
+initial_students <- 900
+
+#parameters for assigning credit load
+mean_credits <- 9
+sd_credits <- 6
+
+#values for 'return' variable calculation
+B_Gender <- 0.1
+B_Credits <- 0.02
+C_constant <- 0.9
+
+# Diagnosis and robustness checks -----------------------------------------
+
+
+#enrollment seems steady over time so it looks like
+#the coefficients and constants specified are ok.
+#trying to keep it around a thousand
+plot(aggregate(temp$likelihood_of_return,
+               by = list(temp$semester),
+               FUN = length))
+
+#credit load per semester also seems robust over time
+#There's some variation but nothing that's concerning
+aggregate(temp$Credits,
+          by = list(temp$semester),
+          FUN = sum)
+
+#our initial specification of the cumulative credit load
+#seems too high. However, it looks like we hit an equilibrium
+#really fast. It seems that the penalty coefficient of
+#credits -> likelihood of return is doing its job. Even so,
+#we'll probably want to be careful and throw out the first
+#few observations when fitting models
+aggregate(temp$Cumulative_credits,
+          by = list(temp$semester),
+          FUN = mean)
+
+
+# Create aggregate output file --------------------------------------------
+
+
+
+metrics <- data.frame(matrix(NA,
+                             nrow = 0,
+                             ncol = 4))
+
+colnames(metrics) <- c('Model', 'MAE', 'MAPE', 'RMSE')
+
+
+
+for(k in 1:100) {
+  
+  # Aggregate prediction ----------------------------------------------------
+  
+  #general linear model for enrollment which has linear relationship with GDP,
+  # semester fixed effects, and noise
+  new_student_count <- semester_variables$GDP * B_GDP +
+    semester_variables$Spring * B_spring + 
+    semester_variables$Summer * B_summer +
+    semester_variables$Fall * B_fall + 
+    rnorm(nrow(semester_variables),
+          mean = 0,
+          sd = 1)
+  
+  #un-standardizing the calculation so we can get sensible numbers
+  new_student_count <- round(new_student_count * sd_new_students + mean_new_students)
+  
+  # Create new students at t = 0 --------------------------------------------
+  
+  #create t = 0, initial data frame
+  enrolled_students <- data.frame(matrix(c(1:initial_students,
+                                           #randomly assign gender
+                                           sample(c(0, 1),
+                                                  size = initial_students,
+                                                  replace = TRUE,
+                                                  #probability of gender can be changed if needed
+                                                  prob = c(proportion_female, 1 - proportion_female)),
+                                           #sample credits taken in the GIVEN SEMESTER. This part 
+                                           #tells us how many credits the student took NOW. The
+                                           #next part tells us cumulative credits
+                                           round(rtruncnorm(n = initial_students,
+                                                            a = 1,
+                                                            b = 21,
+                                                            mean = mean_credits,
+                                                            sd = sd_credits)),
+                                           #sample credit load from a uniform  distribution
+                                           #truncated at lower bound = 1 and upper at 80 to capture the
+                                           #range of all reasonable credit loads.
+                                           round(runif(n = initial_students,
+                                                       min = 1,
+                                                       max = 80))),
+                                         nrow = 900,
+                                         ncol = 4,
+                                         byrow = FALSE))
+  
+  colnames(enrolled_students) <- c('SID', 'Gender', 'Credits', 'Cumulative_credits')
+  
+  #variables save as character; fixing them here
+  enrolled_students$Gender <- as.numeric(enrolled_students$Gender)
+  
+  enrolled_students$Credits <- as.numeric(enrolled_students$Credits)
+  
+  # Predict likelihood of returning -----------------------------------------
+  
+  #linear model predicting likelihood of return.
+  #model includes gender, cumulative credits, and noise
+  temp <- enrolled_students$Gender * B_Gender - 
+    (enrolled_students$Cumulative_credits * B_Credits)^2 + 
+    enrolled_students$Cumulative_credits * B_Credits +
+    C_constant +
+    rnorm(nrow(enrolled_students),
+          mean = 0,
+          sd = 0.1)
+  
+  #likelihood to probability
+  enrolled_students$likelihood_of_return <- 1 / (1 + exp(1)^-(temp))
+  
+  #generate realized 'return' values by sampling (0/1) using probability
+  #generated above
+  for(i in 1:nrow(enrolled_students)) {
+    enrolled_students$returned[i] <- sample(0:1,
+                                            size = 1,
+                                            replace = TRUE,
+                                            #I know this says 'likelihood of return', but since I
+                                            #did 0/1, it's reversed for the sake of probability
+                                            prob = c(1 - enrolled_students$likelihood_of_return[i], 
+                                                     enrolled_students$likelihood_of_return[i]))
+  }
+  
+  enrolled_students$semester <- 1
+  
+  enrolled <- list()
+  
+  #put all new students into a list as t = 0
+  enrolled[[1]] <- enrolled_students
+  
+  remove(enrolled_students)
+  
+  # Generate t != 0 datasets ------------------------------------------------
+  
+  #generating the list of students enrolled in semester = t
+  #this includes returning students from t - 1 and new students
+  for(i in 2:periods) {
+    
+    #here I'm generating new students in the same way that I generated the
+    #original cohort of students at t = 0
+    temp <- data.frame(matrix(c((max(enrolled[[i - 1]]) + 1):(max(enrolled[[i - 1]]) + new_student_count[i]),
+                                #randomly assign gender
+                                sample(c(0, 1),
+                                       size = new_student_count[i],
+                                       replace = TRUE,
+                                       #probability of gender can be changed if needed
+                                       prob = c(proportion_female, 1 - proportion_female)),
+                                #sample credit load from a truncated normal distribution
+                                #truncated at lower bound = 1 and upper at 21 to capture the
+                                #range of all reasonable cumulative credits. Since these are NEW
+                                #students, their upper bound is limited to 21 instead of 80.
+                                round(rtruncnorm(n = new_student_count[i],
+                                                 a = 1,
+                                                 b = 21,
+                                                 mean = mean_credits,
+                                                 sd = sd_credits)),
+                                #since they're new students, their cumulative credits are 0
+                                rep(0, new_student_count[i])),
+                              nrow = new_student_count[i],
+                              ncol = 4,
+                              byrow = FALSE))
+    
+    colnames(temp) <- c('SID', 'Gender', 'Credits', 'Cumulative_credits')
+    
+    temp$Gender <- as.numeric(temp$Gender)
+    
+    temp$Credits <- as.numeric(temp$Credits)
+    
+    temp$Cumulative_credits <- as.numeric(temp$Cumulative_credits)
+    
+    #initiate likelihood of return variable for new students
+    temp$likelihood_of_return <- NA
+    
+    #add semester index
+    temp$semester <- NA
+    
+    temp$returned <- NA
+    
+    #sample credit distribution for returning students
+    temp2 <- enrolled[[i - 1]][which(enrolled[[i - 1]]$returned == 1),]
+    
+    temp2$Credits <- round(rtruncnorm(n = nrow(temp2),
+                                      a = 1,
+                                      b = 21,
+                                      mean = mean_credits,
+                                      sd = sd_credits))
+    
+    #bind together all new students at t = 1 and 
+    # returning students from t - 1
+    enrolled[[i]] <- rbind(temp, temp2)
+    
+    #add the credit load from t - 1 to get cumulative credits
+    enrolled[[i]]$Cumulative_credits <- enrolled[[i]]$Credits + enrolled[[i]]$Cumulative_credits
+    
+    #calculate likelihood of return in t + 1
+    enrolled[[i]]$likelihood_of_return <- enrolled[[i]]$Gender * B_Gender - 
+      (enrolled[[i]]$Cumulative_credits * B_Credits)^2 + 
+      enrolled[[i]]$Cumulative_credits * B_Credits +
+      C_constant +
+      rnorm(nrow(enrolled[[i]]),
+            mean = 0,
+            sd = 0.1)
+    
+    #coerc to probability
+    enrolled[[i]]$likelihood_of_return <- enrolled[[i]]$likelihood_of_return <- 1 / 
+      (1 + exp(1)^-(enrolled[[i]]$likelihood_of_return))
+    
+    for(j in 1:nrow(enrolled[[i]])){
+      enrolled[[i]]$returned[j] <- sample(0:1,
+                                          size = 1,
+                                          replace = TRUE,
+                                          prob = c(1 - enrolled[[i]]$likelihood_of_return[j],
+                                                   enrolled[[i]]$likelihood_of_return[j]))
+      
+    }
+    
+    #add semester index
+    enrolled[[i]]$semester <- i
+    
+    remove(temp)
+    
+    remove(temp2)
+  }
+  
+  #bring everything into a single dataframe
+  temp <- list.rbind(enrolled)
+  
+  #Appending total headcount to semester dataframe created
+  #at the beginning
+  semester_variables$Total_enrollment <- aggregate(temp$SID,
+                                                   by = list(temp$semester),
+                                                   FUN = length)[,2]
+  
+  #Appending total credits taken in given semester
+  semester_variables$Total_credits_taken <- aggregate(temp$Credits,
+                                                      by = list(temp$semester),
+                                                      FUN = sum)[,2]
+  
+  remove(enrolled)
+  
+  #iterate model building and save robustness checks
+  
+  data <- semester_variables
+  
+  student_data <- temp
+  
+  remove(temp)
+  
+  for(i in 2:nrow(data)) {
+    data$lag[i] <- data$Total_enrollment[i - 1]
+  }
+  
+  # Aggregate-only model ----------------------------------------------------
+  
+  #fit models to 1:t-1 data and predict t
+  for(i in 5:nrow(data)) {
+    #fit simple lm model with semester and GDP terms
+    lm <- lm(Total_enrollment ~ GDP + Spring + Summer + Fall,
+             data = data[1:(i - 1),])
+    
+    #linear t + 1 prediction
+    data$lm_prediction[i] <- predict(lm,
+                                     data[i,!names(data) %in% 'Total_enrollment'])
+    
+    #fit lagged linear model
+    lm_lagged <- lm(Total_enrollment ~ GDP + lag +Spring + Summer + Fall,
+                    data = data[1:(i - 1),])
+    
+    #linear with lat t + 1 prediction
+    data$lm_lagged_prediction[i] <- predict(lm_lagged,
+                                            data[i,!names(data) %in% 'Total_enrollment'])
+    
+    #find optimal arima model to 1:t-1 data
+    arima <- auto.arima(data$Total_enrollment[1:(i - 1)],
+                        allowdrift = FALSE)
+    
+    #arima t + 1 prediction
+    data$arima_prediction[i] <- predict(arima,
+                                        n.ahead = 1)$pred[1]
+    
+    #get rid of temporary objects
+    remove(lm)
+    remove(arima)
+  }
+  
+  #calculate residuals for each type of model
+  data$lm_residuals <- data$Total_enrollment - data$lm_prediction
+  
+  data$lm_lagged_residuals <- data$Total_enrollment - data$lm_lagged_prediction
+  
+  data$arima_residuals <- data$Total_enrollment - data$arima_prediction
+  
+  #calculate absolute percent error for each type of model
+  data$lm_ape <- abs(data$lm_residuals) / data$Total_enrollment
+  
+  data$lm_lagged_ape <- abs(data$lm_lagged_residuals) / data$Total_enrollment
+  
+  data$arima_ape <- abs(data$arima_residuals) / data$Total_enrollment
+  
+  # Stacked model -----------------------------------------------------------
+  
+  #set number of iterations
+  semesters <- length(unique(student_data$semester))
+  
+  #create data frame to hold predictions
+  stacked_model_predictions <- data.frame(matrix(nrow = semesters,
+                                                 ncol = 3))
+  
+  colnames(stacked_model_predictions) <- c('Retained_prediction', 'New_prediction', 'Combined_prediction')
+  
+  for(i in 4:(semesters - 1)) {
+    #train dataset = all observations where semester <= i
+    train <- student_data[which(student_data$semester <= i),]
+    
+    #fit stacked model 1 (no polynomial term) to training data
+    individual_model <- glm(returned ~ Gender + Cumulative_credits,
+                            data = train,
+                            family = 'binomial')
+    
+    #fit stacked model 2 (polynomial term)
+    individual_model_1 <- glm(returned ~ Gender + poly(Cumulative_credits, 2) + Cumulative_credits,
+                              data = train,
+                              family = 'binomial')
+    
+    #prediction = t + 1
+    test <- student_data[which(student_data$semester == i + 1),]
+    
+    #predicted # of students returning is mean likelihood of return * number of students
+    #in given semester
+    stacked_model_predictions$Retained_prediction[i + 1] <- mean(predict(individual_model, 
+                                                                         test, type = 'response')) * nrow(test)
+    
+    #predict as above but with higher order model
+    stacked_model_predictions$Retained_prediction_1[i + 1] <- mean(predict(individual_model_1,
+                                                                           test, type = 'response')) * nrow(test)
+    
+    
+    #build linear model
+    #lm <- lm(new_student_count[1:i] ~ GDP + Spring + Summer,
+    #         data = data[1:i,])
+    
+    #predict linear model
+    #stacked_model_predictions$New_prediction[i + 1] <- predict(lm,
+    #                                                           data[i + 1,])
+    
+    #build arima model for new students only. As above, time through i
+    arima <- auto.arima(new_student_count[1:i],
+                        allowdrift = FALSE,
+                        seasonal = TRUE,
+                        max.p = 3,
+                        max.q = 3,
+                        max.d = 1)
+    
+    #predict number of new students in t + 1
+    stacked_model_predictions$New_prediction[i + 1] <- predict(arima,
+                                                               n.ahead = 1)$pred[1]
+    
+    #remove temporary objects
+    remove(train)
+    remove(test)
+    remove(individual_model)
+    remove(individual_model_1)
+    remove(arima)
+  }
+  
+  #'stacked' model predicts # of predicted return + # of predicted new
+  stacked_model_predictions$Combined_prediction <- stacked_model_predictions$Retained_prediction + 
+    stacked_model_predictions$New_prediction
+  
+  stacked_model_predictions$Combined_prediction_1 <- stacked_model_predictions$Retained_prediction_1 +
+    stacked_model_predictions$New_prediction
+  
+  #add variable to overall dataset
+  data$stacked_predictions <- stacked_model_predictions$Combined_prediction
+  
+  data$stacked_predictions_1 <- stacked_model_predictions$Combined_prediction_1
+  
+  #calculate residual
+  data$stacked_residuals <- data$Total_enrollment - data$stacked_predictions
+  
+  data$stacked_residuals_1 <- data$Total_enrollment - data$stacked_predictions_1
+  
+  #calculate absolute percent error
+  data$stacked_ape <- abs(data$stacked_residuals) / data$Total_enrollment
+  
+  data$stacked_ape_1 <- abs(data$stacked_residuals_1) / data$Total_enrollment
+  
+  # Predictive accuracy diagnostics -----------------------------------------
+  
+  #create diagnostics and create DF
+  diagnostics <- data.frame(cbind(c('Linear Model', 'Linear w/ lag', 'ARIMA', 'Stacked Model', 'Stacked Model w/ Polynomial'),
+                                  #MAE
+                                  c(mean(abs(data$lm_residuals), na.rm = TRUE),
+                                    mean(abs(data$lm_lagged_residuals), na.rm = TRUE),
+                                    mean(abs(data$arima_residuals), na.rm = TRUE),
+                                    mean(abs(data$stacked_residuals), na.rm = TRUE),
+                                    mean(abs(data$stacked_residuals_1), na.rm = TRUE)),
+                                  #MAPE
+                                  c(mean(data$lm_ape, na.rm = TRUE),
+                                    mean(data$lm_lagged_ape, na.rm = TRUE),
+                                    mean(data$arima_ape, na.rm = TRUE),
+                                    mean(data$stacked_ape, na.rm = TRUE),
+                                    mean(data$stacked_ape_1, na.rm = TRUE)),
+                                  #RMSE
+                                  c(sqrt(mean(data$lm_residuals^2, na.rm = TRUE)),
+                                    sqrt(mean(data$lm_lagged_residuals^2, na.rm = TRUE)),
+                                    sqrt(mean(data$arima_residuals^2, na.rm = TRUE)),
+                                    sqrt(mean(data$stacked_residuals^2, na.rm = TRUE)),
+                                    sqrt(mean(data$stacked_residuals_1^2, na.rm = TRUE)))))
+  
+  #rename columns and coerce to numeric
+  colnames(diagnostics) <- c('Model', 'MAE', 'MAPE', 'RMSE')
+  
+  metrics <- rbind(metrics, diagnostics)
+  
+  remove(diagnostics)
+  
+  print(k)
+}
+
+
+# Aggregate fit values ----------------------------------------------------
+
+temp <- metrics[76:575,]
+
+for(i in 2:4) {
+  temp[,i] <- as.numeric(temp[,i])
+}
+
+#round MAE and RMSE, coerce MAPE to %
+temp[,2] <- round(temp[,2], 2)
+#temp[,3] <- percent(temp[,3], 0.01)
+temp[,4] <- round(temp[,4], 2)
+
+temp <- temp[complete.cases(temp),]
+
+for(i in 2:ncol(temp)) {
+  print(aggregate(temp[,i],
+                  by = list(temp$Model),
+                  FUN = mean))
+}
+
+write.csv(temp,
+          file = 'aggregate_metrics.csv')
+
+for(i in 2:ncol(metrics)) {
+  print(mean(metrics[,i]))
+}
+
+temp$index <- 1:nrow(temp)
+
+viz <- melt(temp,
+            id.vars = c('index', 'Model'))
+
+ggplot(data = viz) +
+  geom_histogram(aes(x = value)) +
+  facet_grid(rows = vars(viz$Model),
+             cols = vars(viz$variable),
+             scales = 'free_x')
+
+
