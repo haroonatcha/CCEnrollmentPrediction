@@ -105,6 +105,14 @@ for(i in 4:(semesters - 1)) {
                                                                          test, type = 'response')) * nrow(test)
   
   
+  #build linear model
+  #lm <- lm(new_student_count[1:i] ~ GDP + Spring + Summer,
+  #         data = data[1:i,])
+  
+  #predict linear model
+  #stacked_model_predictions$New_prediction[i + 1] <- predict(lm,
+  #                                                           data[i + 1,])
+  
   #build arima model for new students only. As above, time through i
   arima <- auto.arima(new_student_count[1:i],
                       allowdrift = FALSE,
@@ -189,3 +197,6 @@ write.csv(diagnostics,
 #write out predictions to plot for paper
 write.csv(data,
           file = 'predictions.csv')
+
+stacked_model_predictions
+summary(lm)

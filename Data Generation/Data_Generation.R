@@ -3,7 +3,7 @@ library('rlist')
 
 # Initialize variables ----------------------------------------------------
 
-set.seed(100)
+set.seed(1000)
 
 #values for GDP. Random walk process
 periods <- 100
@@ -12,6 +12,8 @@ GDP <- rnorm(1, mean = 0, sd = 1)
 for(i in 2:periods) {
   GDP[i] <- GDP[i - 1] + rnorm(1, mean = 0, sd = 1)
 }
+
+GDP <- GDP + abs(min(GDP))
 
 #creating a data frame with semester binaries
 semester_variables <- data.frame(cbind(GDP,
@@ -60,7 +62,8 @@ new_student_count <- semester_variables$GDP * B_GDP +
 
 #un-standardizing the calculation so we can get sensible numbers
 new_student_count <- round(new_student_count * sd_new_students + mean_new_students)
-
+new_student_count
+plot(GDP)
 
 # Create new students at t = 0 --------------------------------------------
 
@@ -275,8 +278,6 @@ write.csv(semester_variables,
 #write out individual file
 write.csv(temp,
           file = 'student_level.csv')
-
-
 
 
 #write out new student count file
