@@ -1,5 +1,6 @@
 library('forecast')
 library('scales')
+library(tidyverse)
 
 data <- read.csv('data.csv',
                  colClasses = c('NULL', rep(NA, 6)))
@@ -64,8 +65,8 @@ student_data <- student_data[, names(student_data) %in% c('returned', 'Gender', 
 
 #read in # of new students and coerce to vector for easier
 #time series modelling
-new_student_count <- read.csv('new_student_count.csv',
-                              colClasses = c('NULL', NA))
+new_student_count <- semester_variables %>%
+  dplyr::select(new_student_count, GDP)
 
 new_student_count <- as.vector(new_student_count$new_student_count)
 
