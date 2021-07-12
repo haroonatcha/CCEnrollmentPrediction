@@ -57,17 +57,33 @@ generate_ids = function(n_students, current_max_id) {
 # Generate credit loads for students
 generate_credit_loads = function(n_students) {
   mean_credits = 9
-  sd_credits = 6
+  sd_credits = 4
   return(round(rtruncnorm(n_students, a = 1, b = 21,
                           mean = mean_credits, sd = sd_credits)))
 }
 
+# Generate total number of credits passed
+generate_credits_earned = function(credit_loads) {
+  # 60% of students pass all of their credits
+  # 15% of students pass none of their credits
+  # for the remaining students, the pass rate is ~ N(0.5, 0.2)
+  total_students = length(credit_loads)
+  credits_passed = case_when(runif(total_students, 0, 1) < 0.6 ~ credit_loads,
+                             runif(total_students, 0, 1) < 0.15 ~ 0,
+                             T ~ round(rnorm(total_students, 0.5, 0.2) * credit_loads))
+  credits_passed = pmin(credits_passed, credit_loads)
+  credits_passed = pmax(credits_passed, 0)
+  return(credits_passed)
+}
+
 # Generate cumulative prior credits for students
 generate_cumulative_credits = function(n_students) {
-  min_cumulative_credits = 1
+  min_cumulative_credits = 0
   max_cumulative_credits = 80
-  return(round(runif(n_students,
-                     min_cumulative_credits, max_cumulative_credits)))
+  cumulative_credits = round(rexp(n_students, 0.07))
+  cumulative_credits = pmin(cumulative_credits, max_cumulative_credits)
+  cumulative_credits = pmax(cumulative_credits, min_cumulative_credits)
+  return(cumulative_credits)
 }
 
 # Generate a set of new students
@@ -75,6 +91,7 @@ generate_new_students = function(n_students, current_max_id) {
   new_students = generate_demographics(n_students) %>%
     mutate(SID = generate_ids(n_students, current_max_id),
            Credits = generate_credit_loads(n_students),
+           Credits_passed = generate_credits_earned(Credits),
            Cumulative_credits = generate_cumulative_credits(n_students))
   return(new_students)
 }
@@ -164,7 +181,7 @@ for(i in 2:periods) {
   returning = enrolled %>%
     filter(semester == i - 1,
            returned == 1) %>%
-    mutate(Cumulative_credits = Cumulative_credits + Credits,
+    mutate(Cumulative_credits = Cumulative_credits + Credits_passed,
            Credits = generate_credit_loads(n()))
   
   # bind together all new students at t = 1 and 
