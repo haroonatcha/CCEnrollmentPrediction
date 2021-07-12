@@ -64,10 +64,12 @@ generate_credit_loads = function(n_students) {
 
 # Generate cumulative prior credits for students
 generate_cumulative_credits = function(n_students) {
-  min_cumulative_credits = 1
+  min_cumulative_credits = 0
   max_cumulative_credits = 80
-  return(round(runif(n_students,
-                     min_cumulative_credits, max_cumulative_credits)))
+  cumulative_credits = round(rexp(n_students, 0.07))
+  cumulative_credits = pmin(cumulative_credits, max_cumulative_credits)
+  cumulative_credits = pmax(cumulative_credits, min_cumulative_credits)
+  return(cumulative_credits)
 }
 
 # Generate a set of new students
