@@ -57,7 +57,7 @@ generate_ids = function(n_students, current_max_id) {
 # Generate credit loads for students
 generate_credit_loads = function(n_students) {
   mean_credits = 9
-  sd_credits = 6
+  sd_credits = 4
   return(round(rtruncnorm(n_students, a = 1, b = 21,
                           mean = mean_credits, sd = sd_credits)))
 }
